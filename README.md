@@ -169,6 +169,13 @@ This project is based on clean-room reverse engineering informed by:
 - **Website**: [naranjositos.tech](https://naranjositos.tech)
 - **Repository**: [github.com/xaskasdf/MP3FM](https://github.com/xaskasdf/MP3FM)
 
+## Disclaimer
+
+Sony, Network Walkman, SonicStage, OpenMG, ATRAC, and all associated logos and
+trademarks are the property of Sony Corporation. This project is not affiliated
+with, endorsed by, or sponsored by Sony Corporation. All product names are used
+for identification purposes only.
+
 ## License
 
 This is free and unencumbered software released into the public domain. See [UNLICENSE](UNLICENSE) for details.
