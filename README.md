@@ -164,6 +164,11 @@ This project is based on clean-room reverse engineering informed by:
 - **FFmpeg** -- OMA/EA3 demuxer source (`libavformat/oma.c`)
 - **waider.ie FILE_FORMAT_v2** -- community format documentation
 
+## Links
+
+- **Website**: [naranjositos.tech](https://naranjositos.tech)
+- **Repository**: [github.com/xaskasdf/MP3FM](https://github.com/xaskasdf/MP3FM)
+
 ## License
 
 This is free and unencumbered software released into the public domain. See [UNLICENSE](UNLICENSE) for details.
