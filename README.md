@@ -83,7 +83,25 @@ python3 mp3fm.py --help
 | `files`  | One or more audio files or directories |
 | `-b`, `--bitrate` | MP3 encoding bitrate in kbps (default: 128) |
 
-### Mounting the Walkman
+### Windows
+
+On Windows the Walkman appears as a removable drive (e.g. `E:\`).  Use the
+drive letter as the device path:
+
+```cmd
+python mp3fm.py E:\ C:\Music\album\
+```
+
+Or with the prebuilt binary (no Python needed):
+
+```cmd
+mp3fm.exe E:\ C:\Music\album\
+```
+
+> **Note:** [ffmpeg.exe](https://ffmpeg.org/download.html) must be in your
+> `PATH` or in the same directory as mp3fm for FLAC/WAV/OGG conversion.
+
+### Linux / macOS
 
 The Walkman appears as a USB Mass Storage device.  Mount it normally:
 

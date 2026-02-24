@@ -917,7 +917,19 @@ def transfer_files(device_path, input_paths, bitrate=128):
 
         # Sync filesystem
         print("\nSyncing filesystem...")
-        subprocess.run(["sync"], check=True)
+        import platform
+        if platform.system() == "Windows":
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # Flush all filesystem buffers
+            vol = device_path.rstrip("\\").rstrip("/")
+            handle = kernel32.CreateFileW(
+                f"\\\\.\\{vol}", 0x40000000, 3, None, 3, 0, None)
+            if handle != -1:
+                kernel32.FlushFileBuffers(handle)
+                kernel32.CloseHandle(handle)
+        else:
+            subprocess.run(["sync"], check=True)
 
         print(f"\nDone! Transferred {len(tracks)} tracks to {device_path}")
         print("You can now safely eject the device.")

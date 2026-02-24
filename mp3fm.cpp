@@ -10,7 +10,8 @@
  * Based on RE of: FrankPACAPI.dll, waider.ie FILE_FORMAT_v2, rustystage,
  * FU-NW-HD5, JSymphonic, FFmpeg OMA implementation.
  *
- * Build: g++ -std=c++17 -O2 -o mp3fm mp3fm.cpp
+ * Build (Linux/macOS): g++ -std=c++17 -O2 -o mp3fm mp3fm.cpp
+ * Build (Windows):     x86_64-w64-mingw32-g++ -std=c++17 -O2 -o mp3fm.exe mp3fm.cpp
  * Usage: ./mp3fm <device_path> <files_or_dirs...> [-b bitrate]
  */
 
@@ -32,12 +33,20 @@
 #include <string>
 #include <vector>
 
-#include <dirent.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#  include <io.h>
+#  include <direct.h>
+#  include <process.h>
+#else
+#  include <dirent.h>
+#  include <fcntl.h>
+#  include <sys/stat.h>
+#  include <sys/types.h>
+#  include <sys/wait.h>
+#  include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -1158,6 +1167,48 @@ static std::string convert_to_mp3(const std::string& input_path,
                                    int bitrate) {
     std::string br_str = std::to_string(bitrate) + "k";
 
+#ifdef _WIN32
+    // Windows: use CreateProcess with stdout/stderr redirected to NUL
+    std::string cmd = "ffmpeg.exe -y -i \"" + input_path + "\" -codec:a libmp3lame"
+                      " -b:a " + br_str + " -ar 44100 -ac 2"
+                      " -map_metadata 0 -id3v2_version 3 \"" + output_path + "\"";
+
+    SECURITY_ATTRIBUTES sa = {};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+
+    HANDLE hNull = CreateFileA("NUL", GENERIC_WRITE, FILE_SHARE_WRITE,
+                               &sa, OPEN_EXISTING, 0, nullptr);
+
+    STARTUPINFOA si = {};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = hNull;
+    si.hStdError = hNull;
+
+    PROCESS_INFORMATION pi = {};
+    BOOL ok = CreateProcessA(nullptr, const_cast<char*>(cmd.c_str()),
+                             nullptr, nullptr, TRUE, 0, nullptr, nullptr, &si, &pi);
+    if (!ok) {
+        if (hNull != INVALID_HANDLE_VALUE) CloseHandle(hNull);
+        std::cerr << "Error: failed to launch ffmpeg for " << input_path << "\n";
+        std::exit(1);
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exit_code = 0;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    if (hNull != INVALID_HANDLE_VALUE) CloseHandle(hNull);
+
+    if (exit_code != 0) {
+        std::cerr << "Error: ffmpeg conversion failed for " << input_path << "\n";
+        std::exit(1);
+    }
+#else
+    // POSIX: fork + exec
     pid_t pid = fork();
     if (pid < 0) {
         std::cerr << "Error: fork() failed\n";
@@ -1165,7 +1216,6 @@ static std::string convert_to_mp3(const std::string& input_path,
     }
 
     if (pid == 0) {
-        // Child process - redirect stderr to /dev/null for cleaner output
         int devnull = open("/dev/null", O_WRONLY);
         if (devnull >= 0) {
             dup2(devnull, STDOUT_FILENO);
@@ -1191,6 +1241,7 @@ static std::string convert_to_mp3(const std::string& input_path,
         std::cerr << "Error: ffmpeg conversion failed for " << input_path << "\n";
         std::exit(1);
     }
+#endif
 
     return output_path;
 }
@@ -1249,7 +1300,7 @@ static bool copy_file_binary(const std::string& src, const std::string& dst) {
 static int clean_oma_files(const std::string& omgaudio) {
     int cleaned = 0;
     for (int d = 0; d < 256; ++d) {
-        std::string dir_path = omgaudio + "/" + format_oma_dir(d);
+        std::string dir_path = (fs::path(omgaudio) / format_oma_dir(d)).string();
         if (!fs::is_directory(dir_path)) continue;
         for (const auto& entry : fs::directory_iterator(dir_path)) {
             std::string fname = to_upper(entry.path().filename().string());
@@ -1269,6 +1320,19 @@ static int clean_oma_files(const std::string& omgaudio) {
 class TempDir {
 public:
     TempDir() {
+#ifdef _WIN32
+        char tmp[MAX_PATH];
+        GetTempPathA(MAX_PATH, tmp);
+        char dir[MAX_PATH];
+        // GetTempFileName creates a unique file; we delete it and mkdir instead
+        if (GetTempFileNameA(tmp, "m3f", 0, dir) == 0) {
+            std::cerr << "Error: GetTempFileName failed\n";
+            std::exit(1);
+        }
+        DeleteFileA(dir);
+        CreateDirectoryA(dir, nullptr);
+        path_ = dir;
+#else
         char tmpl[] = "/tmp/mp3fm_XXXXXX";
         char* result = mkdtemp(tmpl);
         if (!result) {
@@ -1276,6 +1340,7 @@ public:
             std::exit(1);
         }
         path_ = result;
+#endif
     }
 
     ~TempDir() {
@@ -1300,12 +1365,12 @@ private:
 static void transfer_files(const std::string& device_path,
                            const std::vector<std::string>& input_paths,
                            int bitrate) {
-    std::string omgaudio = device_path + "/" + OMGAUDIO_DIR;
-    std::string dvid_path = device_path + "/MP3FM/DvID.dat";
+    std::string omgaudio = (fs::path(device_path) / OMGAUDIO_DIR).string();
+    std::string dvid_path = (fs::path(device_path) / "MP3FM" / "DvID.dat").string();
 
     // Determine backup directory (relative to executable/CWD)
     std::string self_dir = fs::current_path().string();
-    std::string backup_dir = self_dir + "/device_backup/OMGAUDIO";
+    std::string backup_dir = (fs::path(self_dir) / "device_backup" / "OMGAUDIO").string();
 
     if (!fs::is_directory(omgaudio)) {
         std::cerr << "Error: OMGAUDIO directory not found at " << omgaudio << "\n";
@@ -1351,8 +1416,8 @@ static void transfer_files(const std::string& device_path,
         int folder_num = track_id / 256;
         std::string oma_dir_name = format_oma_dir(folder_num);
         std::string oma_file_name = format_oma_file(track_id);
-        std::string oma_dir_path = omgaudio + "/" + oma_dir_name;
-        std::string oma_path = oma_dir_path + "/" + oma_file_name;
+        std::string oma_dir_path = (fs::path(omgaudio) / oma_dir_name).string();
+        std::string oma_path = (fs::path(oma_dir_path) / oma_file_name).string();
 
         std::string basename = fs::path(audio_file).filename().string();
         std::cout << "[" << (idx + 1) << "/" << audio_files.size() << "] " << basename << "\n";
@@ -1366,7 +1431,7 @@ static void transfer_files(const std::string& device_path,
             std::cout << "  Converting " << ext << " -> MP3 (" << bitrate << "kbps)...\n";
             char hex_id[16];
             std::snprintf(hex_id, sizeof(hex_id), "%04x", track_id);
-            mp3_path = tmp_dir.path() + "/track_" + hex_id + ".mp3";
+            mp3_path = (fs::path(tmp_dir.path()) / (std::string("track_") + hex_id + ".mp3")).string();
             convert_to_mp3(audio_file, mp3_path, bitrate);
         }
 
@@ -1402,8 +1467,8 @@ static void transfer_files(const std::string& device_path,
 
     if (fs::is_directory(backup_dir)) {
         for (const auto& fname : restore_from_backup) {
-            std::string src = backup_dir + "/" + fname;
-            std::string dst = omgaudio + "/" + fname;
+            std::string src = (fs::path(backup_dir) / fname).string();
+            std::string dst = (fs::path(omgaudio) / fname).string();
             if (fs::is_regular_file(src)) {
                 copy_file_binary(src, dst);
             }
@@ -1411,17 +1476,17 @@ static void transfer_files(const std::string& device_path,
     } else {
         // Write empty files from scratch if no backup
         for (int i = 2; i <= 4; ++i) {
-            write_01tree_empty(omgaudio + "/01TREE0" + std::to_string(i) + ".DAT");
+            write_01tree_empty((fs::path(omgaudio) / ("01TREE0" + std::to_string(i) + ".DAT")).string());
         }
         std::vector<std::string> empty_items;
         for (int i = 2; i <= 4; ++i) {
-            write_03ginf_simple(omgaudio + "/03GINF0" + std::to_string(i) + ".DAT", empty_items);
+            write_03ginf_simple((fs::path(omgaudio) / ("03GINF0" + std::to_string(i) + ".DAT")).string(), empty_items);
         }
-        write_02treinf(omgaudio + "/02TREINF.DAT", tracks);
+        write_02treinf((fs::path(omgaudio) / "02TREINF.DAT").string(), tracks);
     }
 
     // Step 2: Group tracks by album for tree structure
-    auto albums = write_03ginf01(omgaudio + "/03GINF01.DAT", tracks);
+    auto albums = write_03ginf01((fs::path(omgaudio) / "03GINF01.DAT").string(), tracks);
     std::cout << "  03GINF01.DAT (ok)\n";
 
     std::vector<std::vector<int>> tracks_per_group;
@@ -1430,24 +1495,41 @@ static void transfer_files(const std::string& device_path,
     }
 
     // Step 3: Write critical database files
-    write_00gtrlst(omgaudio + "/00GTRLST.DAT");
+    write_00gtrlst((fs::path(omgaudio) / "00GTRLST.DAT").string());
     std::cout << "  00GTRLST.DAT (ok)\n";
 
-    write_01tree(omgaudio + "/01TREE01.DAT", tracks_per_group);
+    write_01tree((fs::path(omgaudio) / "01TREE01.DAT").string(), tracks_per_group);
     size_t total_tree_tracks = 0;
     for (const auto& g : tracks_per_group) total_tree_tracks += g.size();
     std::cout << "  01TREE01.DAT (ok) (" << tracks_per_group.size() << " groups, "
               << total_tree_tracks << " tracks)\n";
 
-    write_04cntinf(omgaudio + "/04CNTINF.DAT", tracks);
+    write_04cntinf((fs::path(omgaudio) / "04CNTINF.DAT").string(), tracks);
     std::cout << "  04CNTINF.DAT (ok)\n";
 
-    write_05cidlst(omgaudio + "/05CIDLST.DAT", tracks);
+    write_05cidlst((fs::path(omgaudio) / "05CIDLST.DAT").string(), tracks);
     std::cout << "  05CIDLST.DAT (ok)\n";
 
     // Sync filesystem
     std::cout << "\nSyncing filesystem...\n";
+#ifdef _WIN32
+    // Flush the device volume
+    std::string vol = "\\\\.\\";
+    // Extract drive letter from device_path (e.g. "E:" or "E:\")
+    if (device_path.size() >= 2 && device_path[1] == ':')
+        vol += device_path.substr(0, 2);
+    else
+        vol += device_path;
+    HANDLE hVol = CreateFileA(vol.c_str(), GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hVol != INVALID_HANDLE_VALUE) {
+        FlushFileBuffers(hVol);
+        CloseHandle(hVol);
+    }
+#else
     sync();
+#endif
 
     std::cout << "\nDone! Transferred " << tracks.size() << " tracks to " << device_path << "\n";
     std::cout << "You can now safely eject the device.\n";
@@ -1467,9 +1549,15 @@ static void print_usage(const char* argv0) {
               << "  -b, --bitrate  MP3 encoding bitrate in kbps (default: 128)\n\n"
               << "Supports: MP3, FLAC, WAV, OGG, M4A, AAC (non-MP3 converted via ffmpeg)\n\n"
               << "Examples:\n"
+#ifdef _WIN32
+              << "  " << argv0 << " E:\\ C:\\Music\\album\\\n"
+              << "  " << argv0 << " E:\\ track1.mp3 track2.flac\n"
+              << "  " << argv0 << " E:\\ C:\\Music\\ -b 192\n";
+#else
               << "  " << argv0 << " /mnt/walkman ~/Music/album/\n"
               << "  " << argv0 << " /mnt/walkman track1.mp3 track2.flac\n"
               << "  " << argv0 << " /mnt/walkman ~/Music/ -b 192\n";
+#endif
 }
 
 int main(int argc, char* argv[]) {

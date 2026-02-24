@@ -22,8 +22,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Build C++ binary
+      - name: Install MinGW cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64
+
+      - name: Build Linux binary
         run: make
+
+      - name: Build Windows binary
+        run: make windows
 
       - name: Package release artifacts
         run: |
@@ -33,6 +39,7 @@ jobs:
             mp3fm.py mp3fm.cpp Makefile requirements.txt \
             README.md FORMAT.md UNLICENSE
           cp mp3fm "dist/mp3fm-${VERSION}-linux-amd64"
+          cp mp3fm.exe "dist/mp3fm-${VERSION}-windows-amd64.exe"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

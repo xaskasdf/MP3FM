@@ -9,6 +9,7 @@ device_backup/
 
 # Build artifacts
 mp3fm
+mp3fm.exe
 *.o
 __pycache__/
 *.pyc
