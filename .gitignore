@@ -1,0 +1,17 @@
+# Sony original binaries
+*.dll
+*.exe
+help.htm
+
+# Device-specific files
+DvID.dat
+device_backup/
+
+# Build artifacts
+mp3fm
+*.o
+__pycache__/
+*.pyc
+
+# Editor/IDE
+.claude/
