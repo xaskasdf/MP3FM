@@ -818,3 +818,15 @@ Offset 0x23: 10        Stereo
 - rustystage (Rust) -- SonicStage protocol reimplementation
 - FFmpeg `libavformat/oma.c` and `libavformat/oma.h` (LGPL) -- OMA demuxer
 - waider.ie FILE_FORMAT_v2 -- community format documentation
+
+---
+
+## Disclaimer
+
+Sony, Network Walkman, SonicStage, OpenMG, ATRAC, and all associated logos and
+trademarks are the property of Sony Corporation. This document is not affiliated
+with, endorsed by, or sponsored by Sony Corporation. All product names are used
+for identification purposes only.
+
+This is clean-room documentation produced through independent reverse
+engineering for interoperability purposes.

@@ -3,10 +3,13 @@
 Open-source replacement for Sony's `MP3FileManager.exe` -- transfers music to
 Sony Network Walkman players that use the OMGAUDIO database format.
 
-Sony shipped these players with a Windows-only transfer utility and never
-released a Linux or macOS version.  MP3FM reimplements the transfer protocol
-entirely from reverse-engineered documentation, letting you manage your
-Walkman from any platform with Python 3.
+Sony shipped these players with a Windows-only transfer utility that no longer
+works on modern Windows.  MP3FM reimplements the transfer protocol entirely
+from reverse-engineered documentation, letting you manage your Walkman from
+**Windows, Linux, and macOS**.
+
+Available as a **Python script** or a **standalone C++ binary** (no
+dependencies, single executable).
 
 ## Supported Devices
 
@@ -28,26 +31,50 @@ Walkman from any platform with Python 3.
 - **EA3/OMA container** creation with ID3-compatible metadata tags
 - Preserves ID3 tags: title, artist, album, genre, track number
 - Recursive directory scanning -- point it at your music library
+- **Cross-platform**: Windows, Linux, macOS
 
-## Requirements
+## Installation
 
-- **Python 3.6+**
-- **[mutagen](https://mutagen.readthedocs.io/)** -- audio metadata parsing
-  ```
-  pip install mutagen
-  ```
-- **[ffmpeg](https://ffmpeg.org/)** -- required only for non-MP3 input
-  (FLAC, WAV, OGG, etc.)
-  ```
-  # Debian/Ubuntu
-  sudo apt install ffmpeg
+### Option 1: Prebuilt binary (recommended)
 
-  # Arch
-  sudo pacman -S ffmpeg
+Download the latest release from the
+[Releases page](https://github.com/xaskasdf/MP3FM/releases) -- available for
+Linux and Windows.  No Python or other dependencies required (ffmpeg still
+needed for non-MP3 input).
 
-  # macOS
-  brew install ffmpeg
-  ```
+### Option 2: Python script
+
+Requires **Python 3.6+** and the
+**[mutagen](https://mutagen.readthedocs.io/)** library:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Option 3: Build from source (C++)
+
+```bash
+make            # Linux / macOS
+make windows    # Cross-compile for Windows (requires MinGW)
+```
+
+### ffmpeg (all options)
+
+**[ffmpeg](https://ffmpeg.org/)** is required only for non-MP3 input
+(FLAC, WAV, OGG, etc.):
+
+```bash
+# Debian/Ubuntu
+sudo apt install ffmpeg
+
+# Arch
+sudo pacman -S ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Windows: download from https://ffmpeg.org/download.html and add to PATH
+```
 
 ## Usage
 
@@ -79,7 +106,7 @@ python3 mp3fm.py --help
 
 | Argument | Description |
 |----------|-------------|
-| `device` | Walkman mount point (e.g. `/mnt/walkman`) |
+| `device` | Walkman mount point (e.g. `/mnt/walkman` or `E:\`) |
 | `files`  | One or more audio files or directories |
 | `-b`, `--bitrate` | MP3 encoding bitrate in kbps (default: 128) |
 
